@@ -1,0 +1,190 @@
+---
+# Основные задачи для настройки firewall
+
+- name: Установка ufw
+  apt:
+    name: ufw
+    state: present
+    update_cache: true
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  tags:
+    - firewall
+    - ufw
+    - packages
+
+- name: Остановка firewall перед настройкой (если требуется сброс)
+  ufw:
+    state: reset
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_reset
+  tags:
+    - firewall
+    - ufw
+    - reset
+
+- name: Настройка политик по умолчанию
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+    state: present
+  loop:
+    - { direction: "incoming", policy: "{{ firewall_default_incoming }}" }
+    - { direction: "outgoing", policy: "{{ firewall_default_outgoing }}" }
+    - { direction: "forwarded", policy: "{{ firewall_default_forward }}" }
+    - { direction: "routed", policy: "{{ firewall_default_routed }}" }
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  tags:
+    - firewall
+    - ufw
+    - policy
+
+- name: Настройка логирования
+  ufw:
+    logging: "{{ firewall_logging }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  tags:
+    - firewall
+    - ufw
+    - logging
+
+- name: Включение/выключение IPv6
+  lineinfile:
+    path: /etc/default/ufw
+    regexp: "^IPV6="
+    line: "IPV6={{ 'yes' if firewall_ipv6 else 'no' }}"
+    create: true
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  tags:
+    - firewall
+    - ufw
+    - ipv6
+
+- name: Разрешение портов
+  ufw:
+    rule: allow
+    port: "{{ item.port.split('/')[0] }}"
+    proto: "{{ item.port.split('/')[1] | default('tcp') }}"
+    comment: "{{ item.comment | default('') }}"
+  loop: "{{ firewall_allowed_ports }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_allowed_ports | length > 0
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Разрешение IP адресов/сетей
+  ufw:
+    rule: allow
+    from_ip: "{{ item.ip }}"
+    comment: "{{ item.comment | default('') }}"
+  loop: "{{ firewall_allowed_ips }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_allowed_ips | length > 0
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Блокировка IP адресов
+  ufw:
+    rule: deny
+    from_ip: "{{ item.ip }}"
+    comment: "{{ item.comment | default('') }}"
+  loop: "{{ firewall_blocked_ips }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_blocked_ips | length > 0
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Применение raw правил ufw
+  shell: "{{ item.rule }}"
+  args:
+    creates: /tmp/ufw-rule-{{ item.hash | default(item.rule | hash('md5')) }}
+  loop: "{{ firewall_raw_rules }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_raw_rules | length > 0
+  tags:
+    - firewall
+    - ufw
+    - raw
+
+- name: Включение логирования удаленных соединений
+  lineinfile:
+    path: /etc/default/ufw
+    regexp: "^LOG_UDP="
+    line: "LOG_UDP={{ 'yes' if firewall_log_ufw else 'no' }}"
+    create: true
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  tags:
+    - firewall
+    - ufw
+    - logging
+
+- name: Управление состоянием firewall
+  ufw:
+    state: "{{ firewall_state }}"
+    enabled: "{{ firewall_enabled_on_boot }}"
+  when: firewall_enabled
+  register: firewall_service
+  tags:
+    - firewall
+    - ufw
+    - service
+
+- name: Проверка статуса firewall
+  command: ufw status verbose
+  register: firewall_status
+  changed_when: false
+  when: firewall_enabled
+  tags:
+    - firewall
+    - ufw
+    - check
+
+- name: Отображение статуса firewall
+  debug:
+    msg: "{{ firewall_status.stdout_lines }}"
+  when:
+    - firewall_enabled
+    - firewall_status.stdout_lines is defined
+  tags:
+    - firewall
+    - ufw
+    - check
+
+- name: Информация о firewall
+  debug:
+    msg:
+      - "Firewall настроен и {{ firewall_state }}!"
+      - "Логирование: {{ firewall_logging }}"
+      - "IPv6: {{ 'включен' if firewall_ipv6 else 'выключен' }}"
+      - "Политики: incoming={{ firewall_default_incoming }}, outgoing={{ firewall_default_outgoing }}"
+      - "Разрешенных портов: {{ firewall_allowed_ports | length }}"
+      - "Статус: ufw status verbose"
+  when: firewall_enabled
+  tags:
+    - firewall
+    - ufw

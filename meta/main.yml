@@ -1,0 +1,27 @@
+---
+galaxy_info:
+  author: y.kossin
+  role_name: firewall
+  namespace: ykossin
+  description: Установка и настройка firewall (ufw) на Debian/Ubuntu
+  license: ISC
+  min_ansible_version: "2.9"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - bullseye
+        - trixie
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+  galaxy_tags:
+    - firewall
+    - ufw
+    - security
+    - debian
+    - ubuntu
+
+dependencies: []
