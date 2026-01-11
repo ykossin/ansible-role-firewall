@@ -1,0 +1,248 @@
+---
+# Тесты для проверки работы роли firewall
+
+- name: Verify
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Проверка версии дистрибутива
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution in ['Debian', 'Ubuntu']
+          - ansible_facts.distribution_version is defined
+        fail_msg: >-
+          Неподдерживаемый дистрибутив: {{ ansible_facts.distribution }}
+        success_msg: >-
+          Дистрибутив поддерживается: {{ ansible_facts.distribution }}
+          {{ ansible_facts.distribution_version }}
+      tags:
+        - verify
+        - verify:distribution
+
+    - name: Проверка установки ufw
+      ansible.builtin.command:
+        cmd: ufw --version
+      register: ufw_version
+      changed_when: false
+      tags:
+        - verify
+        - verify:installation
+
+    - name: Проверка наличия ufw
+      ansible.builtin.assert:
+        that:
+          - ufw_version.rc == 0
+          - ufw_version.stdout is defined
+        fail_msg: "UFW не установлен или недоступен"
+        success_msg: "UFW установлен: {{ ufw_version.stdout_lines[0] }}"
+      tags:
+        - verify
+        - verify:installation
+
+    - name: Проверка статуса firewall
+      ansible.builtin.command:
+        cmd: ufw status verbose
+      register: firewall_status
+      changed_when: false
+      tags:
+        - verify
+        - verify:status
+
+    - name: Проверка включения firewall
+      ansible.builtin.assert:
+        that:
+          - firewall_status.rc == 0
+          - >-
+            'Status: active' in firewall_status.stdout or
+            'Status: inactive' in firewall_status.stdout
+        fail_msg: >-
+          Не удалось получить статус firewall:
+          {{ firewall_status.stderr | default('') }}
+        success_msg: "Статус firewall получен успешно"
+      tags:
+        - verify
+        - verify:status
+
+    - name: Проверка разрешения SSH порта (22/tcp)
+      ansible.builtin.command:
+        cmd: ufw status | grep -E "22/tcp.*ALLOW|ALLOW.*22/tcp"
+      register: ssh_rule_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - verify
+        - verify:rules
+
+    - name: Проверка наличия правила для SSH
+      ansible.builtin.assert:
+        that:
+          - ssh_rule_check.rc == 0
+          - ssh_rule_check.stdout is defined
+          - "'22' in ssh_rule_check.stdout"
+        fail_msg: >-
+          SSH порт (22/tcp) не разрешен в firewall!
+          Это критично для доступа к серверу.
+        success_msg: "SSH порт (22/tcp) разрешен в firewall"
+      tags:
+        - verify
+        - verify:rules
+
+    - name: Проверка разрешения HTTP порта (80/tcp)
+      ansible.builtin.command:
+        cmd: ufw status | grep -E "80/tcp.*ALLOW|ALLOW.*80/tcp"
+      register: http_rule_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - verify
+        - verify:rules
+
+    - name: Проверка наличия правила для HTTP
+      ansible.builtin.assert:
+        that:
+          - http_rule_check.rc == 0
+          - "'80' in http_rule_check.stdout"
+        fail_msg: "HTTP порт (80/tcp) не разрешен в firewall"
+        success_msg: "HTTP порт (80/tcp) разрешен в firewall"
+      tags:
+        - verify
+        - verify:rules
+
+    - name: Проверка разрешения HTTPS порта (443/tcp)
+      ansible.builtin.command:
+        cmd: ufw status | grep -E "443/tcp.*ALLOW|ALLOW.*443/tcp"
+      register: https_rule_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - verify
+        - verify:rules
+
+    - name: Проверка наличия правила для HTTPS
+      ansible.builtin.assert:
+        that:
+          - https_rule_check.rc == 0
+          - "'443' in https_rule_check.stdout"
+        fail_msg: "HTTPS порт (443/tcp) не разрешен в firewall"
+        success_msg: "HTTPS порт (443/tcp) разрешен в firewall"
+      tags:
+        - verify
+        - verify:rules
+
+    - name: Проверка политик по умолчанию
+      ansible.builtin.command:
+        cmd: ufw status verbose
+      register: ufw_policies
+      changed_when: false
+      tags:
+        - verify
+        - verify:policies
+
+    - name: Проверка политики для входящих соединений
+      ansible.builtin.assert:
+        that:
+          - >-
+            'Default: deny (incoming)' in ufw_policies.stdout or
+            'Default: deny (incoming),' in ufw_policies.stdout
+        fail_msg: "Политика для входящих соединений не установлена в 'deny'"
+        success_msg: "Политика для входящих соединений установлена в 'deny'"
+      tags:
+        - verify
+        - verify:policies
+
+    - name: Проверка политики для исходящих соединений
+      ansible.builtin.assert:
+        that:
+          - >-
+            'Default: allow (outgoing)' in ufw_policies.stdout or
+            'Default: allow (outgoing),' in ufw_policies.stdout
+        fail_msg: "Политика для исходящих соединений не установлена в 'allow'"
+        success_msg: "Политика для исходящих соединений установлена в 'allow'"
+      tags:
+        - verify
+        - verify:policies
+
+    - name: Проверка настройки логирования
+      ansible.builtin.command:
+        cmd: ufw status verbose | grep -i "logging"
+      register: logging_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - verify
+        - verify:logging
+
+    - name: Проверка наличия настройки логирования
+      ansible.builtin.assert:
+        that:
+          - logging_check.rc == 0
+          - logging_check.stdout is defined
+        fail_msg: "Настройка логирования не найдена"
+        success_msg: "Логирование настроено: {{ logging_check.stdout }}"
+      tags:
+        - verify
+        - verify:logging
+
+    - name: Проверка конфигурационного файла ufw
+      ansible.builtin.stat:
+        path: /etc/default/ufw
+      register: ufw_config
+      tags:
+        - verify
+        - verify:config
+
+    - name: Проверка существования конфигурационного файла
+      ansible.builtin.assert:
+        that:
+          - ufw_config.stat.exists
+          - ufw_config.stat.isreg
+        fail_msg: "Конфигурационный файл /etc/default/ufw не существует"
+        success_msg: "Конфигурационный файл /etc/default/ufw существует"
+      tags:
+        - verify
+        - verify:config
+
+    - name: Проверка настройки IPv6
+      ansible.builtin.command:
+        cmd: grep "^IPV6=" /etc/default/ufw
+      register: ipv6_config
+      changed_when: false
+      failed_when: false
+      tags:
+        - verify
+        - verify:config
+
+    - name: Проверка значения IPv6
+      ansible.builtin.assert:
+        that:
+          - ipv6_config.rc == 0
+          - >-
+            'IPV6=no' in ipv6_config.stdout or
+            'IPV6=yes' in ipv6_config.stdout
+        fail_msg: "Настройка IPv6 не найдена в конфигурации"
+        success_msg: "Настройка IPv6 найдена: {{ ipv6_config.stdout }}"
+      tags:
+        - verify
+        - verify:config
+
+    - name: Проверка работы systemd
+      ansible.builtin.command:
+        cmd: systemctl is-system-running
+      register: systemd_status
+      changed_when: false
+      failed_when: false
+      tags:
+        - verify
+        - verify:systemd
+
+    - name: Проверка статуса systemd
+      ansible.builtin.assert:
+        that:
+          - systemd_status.stdout is defined
+          - systemd_status.stdout not in ['offline', 'initializing']
+        fail_msg: "Systemd не работает: {{ systemd_status.stdout }}"
+        success_msg: "Systemd работает: {{ systemd_status.stdout }}"
+      tags:
+        - verify
+        - verify:systemd

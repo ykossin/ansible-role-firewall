@@ -1,0 +1,100 @@
+---
+# Настройка правил для портов
+
+- name: Парсинг портов для firewall
+  set_fact:
+    _parsed_ports: >-
+      {{
+        _parsed_ports | default([]) + [{
+          'port': (item.port | default(item | string) | string).split('/')[0],
+          'proto': item.proto | default(
+            (item.port | default(item | string) | string).split('/')[1] |
+            default('tcp')
+          ),
+          'comment': item.comment | default('')
+        }]
+      }}
+  loop: "{{ firewall_allowed_ports }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_allowed_ports | length > 0
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Получение текущих правил ufw для проверки идемпотентности
+  command: ufw status numbered
+  register: ufw_current_rules
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - _parsed_ports is defined
+    - (ufw_check.rc == 0) or (ansible_check_mode | default(false))
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Фильтрация портов для добавления (проверка идемпотентности)
+  set_fact:
+    _ports_to_add: "{{ _ports_to_add | default([]) + [item] }}"
+  loop: "{{ _parsed_ports | default([]) }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - _parsed_ports is defined
+    - item.port | string not in (ufw_current_rules.stdout | default(''))
+    - >-
+      (item.port | string + '/' + item.proto | string) not in
+      (ufw_current_rules.stdout | default(''))
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Разрешение портов
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ _ports_to_add | default(_parsed_ports | default([])) }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - _parsed_ports is defined
+    - (ufw_check.rc == 0) or (ansible_check_mode | default(false))
+  register: ufw_port_result
+  failed_when: false
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Обработка ошибок при добавлении правил портов
+  fail:
+    msg: |
+      Ошибка при добавлении правила для порта
+      {{ item.item.port }}/{{ item.item.proto }}:
+      {{ item.stderr | default(item.msg | default('Неизвестная ошибка')) }}
+
+      Проверьте:
+      - Корректность формата порта (число от 1 до 65535)
+      - Корректность протокола (tcp или udp)
+      - Права доступа (требуется root)
+      - Статус ufw (должен быть установлен)
+  when:
+    - item.failed | default(false)
+    - item.rc | default(0) != 0
+  loop: "{{ ufw_port_result.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.port }}/{{ item.item.proto }}"
+  tags:
+    - firewall
+    - ufw
+    - rules

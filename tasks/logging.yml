@@ -1,0 +1,44 @@
+---
+# Настройка логирования и IPv6 для firewall
+
+- name: Настройка логирования
+  ufw:
+    logging: "{{ firewall_logging }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - (ufw_check.rc == 0) or (ansible_check_mode | default(false))
+  failed_when: false
+  register: ufw_logging_result
+  tags:
+    - firewall
+    - ufw
+    - logging
+
+- name: Включение/выключение IPv6
+  lineinfile:
+    path: /etc/default/ufw
+    regexp: "^IPV6="
+    line: "IPV6={{ 'yes' if firewall_ipv6 else 'no' }}"
+    create: true
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  tags:
+    - firewall
+    - ufw
+    - ipv6
+
+- name: Включение логирования удаленных соединений
+  lineinfile:
+    path: /etc/default/ufw
+    regexp: "^LOG_UDP="
+    line: "LOG_UDP={{ 'yes' if firewall_log_ufw else 'no' }}"
+    create: true
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  tags:
+    - firewall
+    - ufw
+    - logging

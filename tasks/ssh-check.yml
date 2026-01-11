@@ -1,0 +1,102 @@
+---
+# Проверка SSH порта перед включением firewall
+
+- name: Инициализация переменной для проверки SSH порта
+  set_fact:
+    _ssh_port_found: false
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_state == "enabled"
+  tags:
+    - firewall
+    - ufw
+    - validation
+
+- name: Проверка разрешения SSH порта в переменных перед включением firewall
+  set_fact:
+    _ssh_port_found: >-
+      {{
+        _ssh_port_found | default(false) or
+        (item.port | default(item | string) | string).split('/')[0] == '22'
+      }}
+  loop: "{{ firewall_allowed_ports | default([]) }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_state == "enabled"
+    - firewall_allowed_ports | length > 0
+  tags:
+    - firewall
+    - ufw
+    - validation
+
+- name: Проверка SSH порта в парсированных портах
+  set_fact:
+    _ssh_port_found: >-
+      {{ _ssh_port_found | default(false) or (item.port | string) == '22' }}
+  loop: "{{ _parsed_ports | default([]) }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_state == "enabled"
+    - _parsed_ports is defined
+  tags:
+    - firewall
+    - ufw
+    - validation
+
+- name: Критическое предупреждение о SSH доступе
+  fail:
+    msg: |
+      ⚠️  КРИТИЧЕСКОЕ ПРЕДУПРЕЖДЕНИЕ: SSH порт (22) не найден в
+      разрешенных портах!
+
+      Firewall будет включен, но SSH доступ может быть заблокирован,
+      что приведет к потере доступа к серверу!
+
+      Текущие разрешенные порты:
+      {{ firewall_allowed_ports | default([]) | map(attribute='port') |
+      list | join(', ') }}
+
+      Рекомендуется:
+      1. Добавить SSH порт в firewall_allowed_ports:
+         firewall_allowed_ports:
+           - {port: "22/tcp", comment: "SSH"}
+      2. Или установить firewall_state: disabled для тестирования
+      3. Убедитесь, что у вас есть альтернативный способ доступа
+         (консоль, IPMI, KVM)
+
+      Если вы уверены, что хотите продолжить, установите переменную:
+      firewall_skip_ssh_check: true
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_state == "enabled"
+    - _ssh_port_found | default(false) == false
+    - firewall_skip_ssh_check | default(false) == false
+  tags:
+    - firewall
+    - ufw
+    - validation
+
+- name: Предупреждение о SSH доступе (не критическое)
+  debug:
+    msg:
+      - "⚠️  ВНИМАНИЕ: SSH порт (22) не найден в разрешенных портах!"
+      - >-
+        Firewall будет включен, но убедитесь, что SSH доступен,
+        иначе возможна потеря доступа!
+      - >-
+        Разрешенные порты: {{ firewall_allowed_ports | default([]) |
+        map(attribute='port') | list | join(', ') }}
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_state == "enabled"
+    - _ssh_port_found | default(false) == false
+    - firewall_skip_ssh_check | default(true) == true
+  tags:
+    - firewall
+    - ufw
+    - validation

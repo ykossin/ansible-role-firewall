@@ -1,0 +1,39 @@
+---
+# Управление состоянием firewall сервиса
+
+- name: Управление состоянием firewall
+  ufw:
+    state: "{{ firewall_state }}"
+    enabled: "{{ firewall_enabled_on_boot }}"
+  when:
+    - firewall_enabled
+    - (ufw_check.rc == 0) or (ansible_check_mode | default(false))
+  register: firewall_service
+  failed_when: false
+  notify: reload ufw
+  tags:
+    - firewall
+    - ufw
+    - service
+
+- name: Обработка ошибок при управлении состоянием firewall
+  fail:
+    msg: |
+      Ошибка при управлении состоянием firewall:
+      {{ firewall_service.stderr | default(firewall_service.msg |
+      default('Неизвестная ошибка')) }}
+
+      Текущее состояние: {{ firewall_service.state | default('неизвестно') }}
+      Запрошенное состояние: {{ firewall_state }}
+
+      Проверьте:
+      - Права доступа (требуется root/sudo)
+      - Статус ufw (должен быть установлен)
+      - Логи: journalctl -u ufw или /var/log/ufw.log
+  when:
+    - firewall_service.failed | default(false)
+    - firewall_service.rc | default(0) != 0
+  tags:
+    - firewall
+    - ufw
+    - service

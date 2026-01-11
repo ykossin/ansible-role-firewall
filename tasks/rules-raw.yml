@@ -1,0 +1,32 @@
+---
+# Применение raw правил ufw
+
+- name: Проверка существования raw правил ufw
+  command: ufw status numbered
+  register: ufw_status_raw
+  changed_when: false
+  failed_when: false
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_raw_rules | length > 0
+  tags:
+    - firewall
+    - ufw
+    - raw
+
+- name: Применение raw правил ufw
+  shell: "{{ item.rule }}"
+  register: raw_rule_result
+  changed_when: raw_rule_result.rc == 0
+  failed_when: raw_rule_result.rc != 0
+  loop: "{{ firewall_raw_rules }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_raw_rules | length > 0
+    - item.rule not in (ufw_status_raw.stdout | default(''))
+  tags:
+    - firewall
+    - ufw
+    - raw

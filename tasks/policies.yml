@@ -1,0 +1,23 @@
+---
+# Настройка политик по умолчанию для firewall
+
+- name: Настройка политик по умолчанию
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - {direction: "incoming", policy: "{{ firewall_default_incoming }}"}
+    - {direction: "outgoing", policy: "{{ firewall_default_outgoing }}"}
+    - {direction: "routed", policy: "{{ firewall_default_routed }}"}
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - (ufw_check.rc == 0) or (ansible_check_mode | default(false))
+  failed_when: false
+  register: ufw_policy_result
+  tags:
+    - firewall
+    - ufw
+    - policy
+    # Примечание: направление "forwarded" не поддерживается модулем ufw
+    # Используется только для совместимости с переменными

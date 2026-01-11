@@ -1,0 +1,40 @@
+---
+# Валидация переменных firewall
+
+- name: Валидация переменных firewall
+  assert:
+    that:
+      - firewall_logging in ['off', 'low', 'medium', 'full', 'on']
+      - firewall_default_incoming in ['allow', 'deny', 'reject']
+      - firewall_default_outgoing in ['allow', 'deny', 'reject']
+      - firewall_default_forward in ['allow', 'deny', 'reject']
+      - firewall_default_routed in ['allow', 'deny', 'reject']
+      - firewall_state in ['enabled', 'disabled', 'reset', 'reloaded']
+      - firewall_type == "ufw"
+    fail_msg: |
+      Некорректное значение переменной firewall:
+      - firewall_logging: {{ firewall_logging | default('не задано') }}
+        (должно быть: off, low, medium, full, on)
+      - >-
+        firewall_default_incoming: {{ firewall_default_incoming |
+        default('не задано') }}
+        (должно быть: allow, deny, reject)
+      - >-
+        firewall_default_outgoing: {{ firewall_default_outgoing |
+        default('не задано') }}
+        (должно быть: allow, deny, reject)
+      - >-
+        firewall_default_forward: {{ firewall_default_forward |
+        default('не задано') }}
+        (должно быть: allow, deny, reject)
+      - firewall_default_routed: {{ firewall_default_routed | default('не задано') }}
+        (должно быть: allow, deny, reject)
+      - firewall_state: {{ firewall_state | default('не задано') }}
+        (должно быть: enabled, disabled, reset, reloaded)
+      - firewall_type: {{ firewall_type | default('не задано') }}
+        (должно быть: ufw)
+    success_msg: "Все переменные firewall валидны"
+  when: firewall_enabled
+  tags:
+    - firewall
+    - validation

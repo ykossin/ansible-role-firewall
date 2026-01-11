@@ -1,0 +1,71 @@
+---
+# Применение роли firewall для тестирования
+
+- name: Converge
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    # Настройки для тестирования
+    firewall_enabled: true
+    firewall_state: enabled
+    firewall_enabled_on_boot: true
+
+    # Политики по умолчанию
+    firewall_default_incoming: "deny"
+    firewall_default_outgoing: "allow"
+    firewall_default_forward: "deny"
+    firewall_default_routed: "deny"
+
+    # Разрешенные порты для тестирования
+    firewall_allowed_ports:
+      - {port: "22/tcp", comment: "SSH"}
+      - {port: "80/tcp", comment: "HTTP"}
+      - {port: "443/tcp", comment: "HTTPS"}
+
+    # Настройки логирования
+    firewall_logging: "low"
+
+    # IPv6 (выключен по умолчанию)
+    firewall_ipv6: false
+
+    # Не сбрасывать правила при тестировании
+    firewall_reset: false
+
+  roles:
+    - role: ../../..
+      tags:
+        - firewall
+
+  post_tasks:
+    - name: Проверка установки ufw
+      ansible.builtin.command:
+        cmd: ufw --version
+      register: ufw_version
+      changed_when: false
+      tags:
+        - verify
+        - verify:installation
+
+    - name: Отображение версии ufw
+      debug:
+        msg: "UFW версия: {{ ufw_version.stdout_lines[0] }}"
+      tags:
+        - verify
+        - verify:installation
+
+    - name: Проверка статуса firewall
+      ansible.builtin.command:
+        cmd: ufw status verbose
+      register: firewall_status_check
+      changed_when: false
+      tags:
+        - verify
+        - verify:status
+
+    - name: Отображение статуса firewall
+      debug:
+        msg: "{{ firewall_status_check.stdout_lines }}"
+      tags:
+        - verify
+        - verify:status

@@ -1,0 +1,54 @@
+---
+# Подготовка окружения перед применением роли firewall
+# Убеждаемся, что systemd работает и система готова к настройке firewall
+
+- name: Prepare
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Ожидание запуска systemd
+      wait_for:
+        path: /run/systemd/system
+        timeout: 30
+      register: systemd_ready
+
+    - name: Проверка статуса systemd
+      ansible.builtin.command:
+        cmd: systemctl is-system-running
+      register: systemd_status
+      changed_when: false
+      failed_when: false
+
+    - name: Отображение статуса systemd
+      debug:
+        msg: "Systemd статус: {{ systemd_status.stdout }}"
+
+    - name: Обновление списка пакетов (предварительное)
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts['os_family'] == "Debian"
+      failed_when: false
+      register: apt_update_result
+      ignore_errors: true
+
+    - name: Проверка версии дистрибутива
+      debug:
+        msg:
+          - "Дистрибутив: {{ ansible_distribution }}"
+          - "Версия: {{ ansible_distribution_version }}"
+          - "Кодовое имя: {{ ansible_distribution_release }}"
+
+    - name: Проверка наличия ufw (до применения роли)
+      ansible.builtin.command:
+        cmd: which ufw || echo "ufw_not_installed"
+      register: ufw_check_before
+      changed_when: false
+      failed_when: false
+
+    - name: Отображение статуса ufw до применения роли
+      debug:
+        msg: >-
+          UFW статус до применения роли:
+          {{ 'установлен' if 'ufw_not_installed' not in
+          ufw_check_before.stdout else 'не установлен' }}

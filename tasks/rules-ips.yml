@@ -1,0 +1,137 @@
+---
+# Настройка правил для IP адресов (разрешение и блокировка)
+
+- name: Получение текущих правил для IP адресов
+  command: ufw status numbered
+  register: ufw_current_ip_rules
+  changed_when: false
+  failed_when: false
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_allowed_ips | length > 0
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Фильтрация IP адресов для добавления (проверка идемпотентности)
+  set_fact:
+    _ips_to_add: "{{ _ips_to_add | default([]) + [item] }}"
+  loop: "{{ firewall_allowed_ips }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_allowed_ips | length > 0
+    - item.ip not in (ufw_current_ip_rules.stdout | default(''))
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Разрешение IP адресов/сетей
+  ufw:
+    rule: allow
+    from_ip: "{{ item.ip }}"
+    comment: "{{ item.comment | default('') }}"
+  loop: "{{ _ips_to_add | default(firewall_allowed_ips) }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_allowed_ips | length > 0
+    - (ufw_check.rc == 0) or (ansible_check_mode | default(false))
+  register: ufw_ip_result
+  failed_when: false
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Обработка ошибок при добавлении правил для IP адресов
+  fail:
+    msg: |
+      Ошибка при добавлении правила для IP {{ item.item.ip }}:
+      {{ item.stderr | default(item.msg | default('Неизвестная ошибка')) }}
+
+      Проверьте:
+      - Корректность формата IP адреса или сети
+        (например, 192.168.1.1 или 192.168.1.0/24)
+      - Права доступа (требуется root)
+      - Статус ufw (должен быть установлен)
+  when:
+    - item.failed | default(false)
+    - item.rc | default(0) != 0
+  loop: "{{ ufw_ip_result.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.ip }}"
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Получение текущих правил для блокировки IP
+  command: ufw status numbered
+  register: ufw_current_blocked_ips
+  changed_when: false
+  failed_when: false
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_blocked_ips | length > 0
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Фильтрация IP адресов для блокировки (проверка идемпотентности)
+  set_fact:
+    _ips_to_block: "{{ _ips_to_block | default([]) + [item] }}"
+  loop: "{{ firewall_blocked_ips }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_blocked_ips | length > 0
+    - item.ip not in (ufw_current_blocked_ips.stdout | default(''))
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Блокировка IP адресов
+  ufw:
+    rule: deny
+    from_ip: "{{ item.ip }}"
+    comment: "{{ item.comment | default('') }}"
+  loop: "{{ _ips_to_block | default(firewall_blocked_ips) }}"
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_blocked_ips | length > 0
+    - (ufw_check.rc == 0) or (ansible_check_mode | default(false))
+  register: ufw_block_result
+  failed_when: false
+  tags:
+    - firewall
+    - ufw
+    - rules
+
+- name: Обработка ошибок при блокировке IP адресов
+  fail:
+    msg: |
+      Ошибка при блокировке IP {{ item.item.ip }}:
+      {{ item.stderr | default(item.msg | default('Неизвестная ошибка')) }}
+
+      Проверьте:
+      - Корректность формата IP адреса (например, 1.2.3.4)
+      - Права доступа (требуется root)
+      - Статус ufw (должен быть установлен)
+  when:
+    - item.failed | default(false)
+    - item.rc | default(0) != 0
+  loop: "{{ ufw_block_result.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.ip }}"
+  tags:
+    - firewall
+    - ufw
+    - rules

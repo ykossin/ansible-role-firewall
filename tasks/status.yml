@@ -1,0 +1,39 @@
+---
+# Проверка статуса и отображение информации о firewall
+
+- name: Проверка статуса firewall
+  command: ufw status verbose
+  register: firewall_status
+  changed_when: false
+  when: firewall_enabled
+  tags:
+    - firewall
+    - ufw
+    - check
+
+- name: Отображение статуса firewall
+  debug:
+    msg: "{{ firewall_status.stdout_lines }}"
+  when:
+    - firewall_enabled
+    - firewall_status.stdout_lines is defined
+  tags:
+    - firewall
+    - ufw
+    - check
+
+- name: Информация о firewall
+  debug:
+    msg:
+      - "Firewall настроен и {{ firewall_state }}!"
+      - "Логирование: {{ firewall_logging }}"
+      - "IPv6: {{ 'включен' if firewall_ipv6 else 'выключен' }}"
+      - >-
+        Политики: incoming={{ firewall_default_incoming }},
+        outgoing={{ firewall_default_outgoing }}
+      - "Разрешенных портов: {{ firewall_allowed_ports | length }}"
+      - "Статус: ufw status verbose"
+  when: firewall_enabled
+  tags:
+    - firewall
+    - ufw

@@ -1,0 +1,65 @@
+---
+# Установка и проверка наличия ufw
+
+- name: Установка ufw
+  apt:
+    name: ufw
+    state: present
+    update_cache: true
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  register: ufw_install_result
+  failed_when: false
+  tags:
+    - firewall
+    - ufw
+    - packages
+
+- name: Обработка ошибок при установке ufw
+  fail:
+    msg: |
+      Ошибка при установке ufw:
+      {{ ufw_install_result.stderr | default(ufw_install_result.msg |
+      default('Неизвестная ошибка')) }}
+
+      Проверьте:
+      - Доступность репозиториев (apt update)
+      - Права доступа (требуется root/sudo)
+      - Свободное место на диске
+      - Сетевое подключение
+  when:
+    - ufw_install_result.failed | default(false)
+    - ufw_install_result.rc | default(0) != 0
+  tags:
+    - firewall
+    - ufw
+    - packages
+
+- name: Остановка firewall перед настройкой (если требуется сброс)
+  ufw:
+    state: reset
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+    - firewall_reset
+    - (ufw_check.rc == 0) or (ansible_check_mode | default(false))
+  failed_when: false
+  tags:
+    - firewall
+    - ufw
+    - reset
+
+- name: Проверка наличия ufw перед настройкой политик
+  command: which ufw
+  register: ufw_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - firewall_enabled
+    - firewall_type == "ufw"
+  tags:
+    - firewall
+    - ufw
+    - policy
